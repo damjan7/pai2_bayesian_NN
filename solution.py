@@ -284,7 +284,7 @@ class BayesianLayer(nn.Module):
         var_pos_variance = self.weights_var_posterior.rho
         weights = var_pos_mean + np.multiply(np.log(1+np.exp(var_pos_variance)),epsilon)
 
-        # The remaining steps are automatically done by Torch (I guess/hope)
+        # The remaining steps have to be implemented in Model! or it is done automatically by torch (don't think so though)
 
         """
         Calculate the log prior --> sample of the log-prior probability
@@ -344,13 +344,39 @@ class BayesNet(nn.Module):
             ii) sample of the log-prior probability, and
             iii) sample of the log-variational-posterior probability
         """
+        """
+        Forward pass of DenseNet
+        
+        current_features = x
 
+        for idx, current_layer in enumerate(self.layers):
+            new_features = current_layer(current_features)
+            if idx < len(self.layers) - 1:
+                new_features = self.activation(new_features)
+            current_features = new_features
+        """
         # TODO: Perform a full pass through your BayesNet as described in this method's docstring.
         #  You can look at DenseNet to get an idea how a forward pass might look like.
         #  Don't forget to apply your activation function in between BayesianLayers!
-        log_prior = torch.tensor(0.0)
-        log_variational_posterior = torch.tensor(0.0)
-        output_features = None
+
+        current_features = x # param x: Input features, float tensor of shape (batch_size, in_features)
+        current_log_prior = torch.tensor(0.0)
+        current_log_var_post = torch.tensor(0.0)
+        for idx, current_layer in enumerate(self.layers):
+            # Calculate 1 forward pass for the first layer
+            new_features, new_log_prior, new_current_log_var_post = current_layer(current_features)
+            # As long as we are not in the last layer we apply the activation to the features
+            if idx < len(self.layers) - 1:
+                new_features = self.activation(new_features)
+            # For the last layer we don't apply the activation function
+            current_features = new_features
+            current_log_prior = new_log_prior
+            current_log_var_post = new_current_log_var_post
+
+        # Set the output variables to the computed values after a full pass through the BayesNet
+        log_prior = current_log_prior
+        log_variational_posterior = current_log_var_post
+        output_features = current_features
 
         return output_features, log_prior, log_variational_posterior
 
