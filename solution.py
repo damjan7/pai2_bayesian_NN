@@ -121,6 +121,19 @@ class Model(object):
                     assert isinstance(self.network, BayesNet)
 
                     # TODO: Implement Bayes by backprop training here
+                    # Model is already set to zerograd
+
+                    # Make predictions
+                    y_pred, log_prior, log_variational_posterior = self.network(batch_x)
+
+                    # TODO: Implement Loss function
+                    # Calculate Loss
+                    # The loss function has this form --> 4. Let f(w,θ)=log(q(w|θ))−log(P(w)P(D|w)).
+                    loss = None
+
+
+                    # Backpropagate to get gradients
+                    loss.backward()
 
                 self.optimizer.step()
 
@@ -343,17 +356,6 @@ class BayesNet(nn.Module):
             i) output features using stochastic weights from the variational posterior,
             ii) sample of the log-prior probability, and
             iii) sample of the log-variational-posterior probability
-        """
-        """
-        Forward pass of DenseNet
-        
-        current_features = x
-
-        for idx, current_layer in enumerate(self.layers):
-            new_features = current_layer(current_features)
-            if idx < len(self.layers) - 1:
-                new_features = self.activation(new_features)
-            current_features = new_features
         """
         # TODO: Perform a full pass through your BayesNet as described in this method's docstring.
         #  You can look at DenseNet to get an idea how a forward pass might look like.
