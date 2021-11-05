@@ -59,23 +59,28 @@ class Model(object):
         self.num_epochs = 100  # number of training epochs
         self.batch_size = 128  # training batch size
         learning_rate = 1e-3  # training learning rates
-        hidden_layers = (100, 100)  # for each entry, creates a hidden layer with the corresponding number of units
-        use_densenet = False  # set this to True in order to run a DenseNet for comparison
-        self.print_interval = 100  # number of batches until updated metrics are displayed during training
+        # for each entry, creates a hidden layer with the corresponding number of units
+        hidden_layers = (100, 100)
+        use_densenet = True  # set this to True in order to run a DenseNet for comparison
+        # number of batches until updated metrics are displayed during training
+        self.print_interval = 100
 
         # Determine network type
         if use_densenet:
             # DenseNet
             print('Using a DenseNet model for comparison')
-            self.network = DenseNet(in_features=28 * 28, hidden_features=hidden_layers, out_features=10)
+            self.network = DenseNet(
+                in_features=28 * 28, hidden_features=hidden_layers, out_features=10)
         else:
             # BayesNet
             print('Using a BayesNet model')
-            self.network = BayesNet(in_features=28 * 28, hidden_features=hidden_layers, out_features=10)
+            self.network = BayesNet(
+                in_features=28 * 28, hidden_features=hidden_layers, out_features=10)
 
         # Optimizer for training
         # Feel free to try out different optimizers
-        self.optimizer = torch.optim.Adam(self.network.parameters(), lr=learning_rate)
+        self.optimizer = torch.optim.Adam(
+            self.network.parameters(), lr=learning_rate)
 
     def train(self, dataset: torch.utils.data.Dataset):
         """
@@ -109,7 +114,8 @@ class Model(object):
                     # Calculate the loss
                     # We use the negative log likelihood as the loss
                     # Combining nll_loss with a log_softmax is better for numeric stability
-                    loss = F.nll_loss(F.log_softmax(current_logits, dim=1), batch_y, reduction='sum')
+                    loss = F.nll_loss(F.log_softmax(
+                        current_logits, dim=1), batch_y, reduction='sum')
 
                     # Backpropagate to get the gradients
                     loss.backward()
@@ -128,8 +134,10 @@ class Model(object):
                     else:
                         assert isinstance(self.network, BayesNet)
                         current_logits, _, _ = self.network(batch_x)
-                    current_accuracy = (current_logits.argmax(axis=1) == batch_y).float().mean()
-                    progress_bar.set_postfix(loss=loss.item(), acc=current_accuracy.item())
+                    current_accuracy = (current_logits.argmax(
+                        axis=1) == batch_y).float().mean()
+                    progress_bar.set_postfix(
+                        loss=loss.item(), acc=current_accuracy.item())
 
     def predict(self, data_loader: torch.utils.data.DataLoader) -> np.ndarray:
         """
@@ -145,7 +153,8 @@ class Model(object):
 
         probability_batches = []
         for batch_x, batch_y in data_loader:
-            current_probabilities = self.network.predict_probabilities(batch_x).detach().numpy()
+            current_probabilities = self.network.predict_probabilities(
+                batch_x).detach().numpy()
             probability_batches.append(current_probabilities)
 
         output = np.concatenate(probability_batches, axis=0)
@@ -161,6 +170,7 @@ class BayesianLayer(nn.Module):
     It maintains a prior and variational posterior for the weights (and biases)
     and uses sampling to approximate the gradients via Bayes by backprop.
     """
+
     def __init__(self, in_features: int, out_features: int, bias: bool = True):
         """
         Create a BayesianLayer.
@@ -179,9 +189,13 @@ class BayesianLayer(nn.Module):
         #  You can create constants using torch.tensor(...).
         #  Do NOT use torch.Parameter(...) here since the prior should not be optimized!
         #  Example: self.prior = MyPrior(torch.tensor(0.0), torch.tensor(1.0))
+
+        # Lets try most basic priors for weight and bias N(0,1) iid
         self.prior = None
+
         assert isinstance(self.prior, ParameterDistribution)
-        assert not any(True for _ in self.prior.parameters()), 'Prior cannot have parameters'
+        assert not any(True for _ in self.prior.parameters()
+                       ), 'Prior cannot have parameters'
 
         # TODO: Create a suitable variational posterior for weights as an instance of ParameterDistribution.
         #  You need to create separate ParameterDistribution instances for weights and biases,
@@ -196,14 +210,16 @@ class BayesianLayer(nn.Module):
         self.weights_var_posterior = None
 
         assert isinstance(self.weights_var_posterior, ParameterDistribution)
-        assert any(True for _ in self.weights_var_posterior.parameters()), 'Weight posterior must have parameters'
+        assert any(True for _ in self.weights_var_posterior.parameters()
+                   ), 'Weight posterior must have parameters'
 
         if self.use_bias:
             # TODO: As for the weights, create the bias variational posterior instance here.
             #  Make sure to follow the same rules as for the weight variational posterior.
             self.bias_var_posterior = None
             assert isinstance(self.bias_var_posterior, ParameterDistribution)
-            assert any(True for _ in self.bias_var_posterior.parameters()), 'Bias posterior must have parameters'
+            assert any(True for _ in self.bias_var_posterior.parameters()
+                       ), 'Bias posterior must have parameters'
         else:
             self.bias_var_posterior = None
 
@@ -251,7 +267,8 @@ class BayesNet(nn.Module):
         feature_sizes = (in_features,) + hidden_features + (out_features,)
         num_affine_maps = len(feature_sizes) - 1
         self.layers = nn.ModuleList([
-            BayesianLayer(feature_sizes[idx], feature_sizes[idx + 1], bias=True)
+            BayesianLayer(feature_sizes[idx],
+                          feature_sizes[idx + 1], bias=True)
             for idx in range(num_affine_maps)
         ])
         self.activation = nn.ReLU()
@@ -286,11 +303,13 @@ class BayesNet(nn.Module):
         :return: Predicted class probabilities, float tensor of shape (batch_size, 10)
             such that the last dimension sums up to 1 for each row
         """
-        probability_samples = torch.stack([F.softmax(self.forward(x)[0], dim=1) for _ in range(num_mc_samples)], dim=0)
+        probability_samples = torch.stack(
+            [F.softmax(self.forward(x)[0], dim=1) for _ in range(num_mc_samples)], dim=0)
         estimated_probability = torch.mean(probability_samples, dim=0)
 
         assert estimated_probability.shape == (x.shape[0], 10)
-        assert torch.allclose(torch.sum(estimated_probability, dim=1), torch.tensor(1.0))
+        assert torch.allclose(
+            torch.sum(estimated_probability, dim=1), torch.tensor(1.0))
         return estimated_probability
 
 
@@ -301,19 +320,23 @@ class UnivariateGaussian(ParameterDistribution):
     """
 
     def __init__(self, mu: torch.Tensor, sigma: torch.Tensor):
-        super(UnivariateGaussian, self).__init__()  # always make sure to include the super-class init call!
+        # always make sure to include the super-class init call!
+        super(UnivariateGaussian, self).__init__()
         assert mu.size() == () and sigma.size() == ()
         assert sigma > 0
         self.mu = mu
         self.sigma = sigma
 
     def log_likelihood(self, values: torch.Tensor) -> torch.Tensor:
-        # TODO: Implement this
-        return 0.0
+        loglik = -1 / 2 * np.log(2 * np.pi * rho ** 2) - 1 / \
+            (2 * rho**2) * (values - mu)**2
+        loglik = torch.tensor(loglik)
+        return loglik
 
     def sample(self) -> torch.Tensor:
-        # TODO: Implement this
-        raise NotImplementedError()
+        # mu and rho need to be tensors! they are see __init__
+        val = torch.normal(mean=mu, std=rho)
+        return val
 
 
 class MultivariateDiagonalGaussian(ParameterDistribution):
@@ -326,17 +349,25 @@ class MultivariateDiagonalGaussian(ParameterDistribution):
     """
 
     def __init__(self, mu: torch.Tensor, rho: torch.Tensor):
-        super(MultivariateDiagonalGaussian, self).__init__()  # always make sure to include the super-class init call!
+        # always make sure to include the super-class init call!
+        super(MultivariateDiagonalGaussian, self).__init__()
         assert mu.size() == rho.size()
         self.mu = mu
         self.rho = rho
 
     def log_likelihood(self, values: torch.Tensor) -> torch.Tensor:
-        # TODO: Implement this
-        return 0.0
+        COV = torch.tensor(np.diag(rho))
+        p = torch.tensor(rho.size())  # dimension of diagonal matrix
+        m = torch.tensor(values.size())    # number of samples (=X)
+
+        loglik = -m * p / 2 - m / 2 + \
+            torch.log(torch.linalg.det(COV)) - 1 / 2 * (values -
+                                                        mu).t() * torch.inverse(COV) * (values - mu)
+        return loglik
 
     def sample(self) -> torch.Tensor:
-        # TODO: Implement this
+        val = torch.normal(mu, COV)
+        return val
         raise NotImplementedError()
 
 
@@ -373,9 +404,11 @@ def evaluate(model: Model, eval_loader: torch.utils.data.DataLoader, data_dir: s
         for row in range(0, 4, 2):
             for col in range(5):
                 sample_idx = most_confident_indices[5 * row // 2 + col]
-                ax[row, col].imshow(np.reshape(eval_samples[sample_idx], (28, 28)), cmap='gray')
+                ax[row, col].imshow(np.reshape(
+                    eval_samples[sample_idx], (28, 28)), cmap='gray')
                 ax[row, col].set_axis_off()
-                ax[row + 1, col].set_title(f'predicted {predicted_classes[sample_idx]}, actual {actual_classes[sample_idx]}')
+                ax[row + 1, col].set_title(
+                    f'predicted {predicted_classes[sample_idx]}, actual {actual_classes[sample_idx]}')
                 bar_colors = ['C0'] * 10
                 bar_colors[actual_classes[sample_idx]] = 'C1'
                 ax[row + 1, col].bar(
@@ -391,9 +424,11 @@ def evaluate(model: Model, eval_loader: torch.utils.data.DataLoader, data_dir: s
         for row in range(0, 4, 2):
             for col in range(5):
                 sample_idx = least_confident_indices[5 * row // 2 + col]
-                ax[row, col].imshow(np.reshape(eval_samples[sample_idx], (28, 28)), cmap='gray')
+                ax[row, col].imshow(np.reshape(
+                    eval_samples[sample_idx], (28, 28)), cmap='gray')
                 ax[row, col].set_axis_off()
-                ax[row + 1, col].set_title(f'predicted {predicted_classes[sample_idx]}, actual {actual_classes[sample_idx]}')
+                ax[row + 1, col].set_title(
+                    f'predicted {predicted_classes[sample_idx]}, actual {actual_classes[sample_idx]}')
                 bar_colors = ['C0'] * 10
                 bar_colors[actual_classes[sample_idx]] = 'C1'
                 ax[row + 1, col].bar(
@@ -403,20 +438,25 @@ def evaluate(model: Model, eval_loader: torch.utils.data.DataLoader, data_dir: s
         fig.savefig(os.path.join(output_dir, 'mnist_least_confident.pdf'))
 
         print('Plotting ambiguous and rotated MNIST confidences')
-        ambiguous_samples = torch.from_numpy(np.load(os.path.join(data_dir, 'test_x.npz'))['test_x']).reshape([-1, 784])[:10]
-        ambiguous_dataset = torch.utils.data.TensorDataset(ambiguous_samples, torch.zeros(10))
+        ambiguous_samples = torch.from_numpy(np.load(os.path.join(
+            data_dir, 'test_x.npz'))['test_x']).reshape([-1, 784])[:10]
+        ambiguous_dataset = torch.utils.data.TensorDataset(
+            ambiguous_samples, torch.zeros(10))
         ambiguous_loader = torch.utils.data.DataLoader(
             ambiguous_dataset, batch_size=10, shuffle=False, drop_last=False
         )
         ambiguous_predicted_probabilities = model.predict(ambiguous_loader)
-        ambiguous_predicted_classes = np.argmax(ambiguous_predicted_probabilities, axis=1)
+        ambiguous_predicted_classes = np.argmax(
+            ambiguous_predicted_probabilities, axis=1)
         fig, ax = plt.subplots(4, 5, figsize=(13, 11))
         for row in range(0, 4, 2):
             for col in range(5):
                 sample_idx = 5 * row // 2 + col
-                ax[row, col].imshow(np.reshape(ambiguous_samples[sample_idx], (28, 28)), cmap='gray')
+                ax[row, col].imshow(np.reshape(
+                    ambiguous_samples[sample_idx], (28, 28)), cmap='gray')
                 ax[row, col].set_axis_off()
-                ax[row + 1, col].set_title(f'predicted {ambiguous_predicted_classes[sample_idx]}')
+                ax[row + 1,
+                    col].set_title(f'predicted {ambiguous_predicted_classes[sample_idx]}')
                 ax[row + 1, col].bar(
                     np.arange(10), ambiguous_predicted_probabilities[sample_idx], tick_label=np.arange(10)
                 )
@@ -425,13 +465,16 @@ def evaluate(model: Model, eval_loader: torch.utils.data.DataLoader, data_dir: s
 
         # Do the same evaluation as on MNIST also on FashionMNIST
         print('Predicting on FashionMNIST data')
-        fmnist_samples = torch.from_numpy(np.load(os.path.join(data_dir, 'fmnist.npz'))['x_test']).reshape([-1, 784])
-        fmnist_dataset = torch.utils.data.TensorDataset(fmnist_samples, torch.zeros(fmnist_samples.shape[0]))
+        fmnist_samples = torch.from_numpy(np.load(os.path.join(data_dir, 'fmnist.npz'))[
+                                          'x_test']).reshape([-1, 784])
+        fmnist_dataset = torch.utils.data.TensorDataset(
+            fmnist_samples, torch.zeros(fmnist_samples.shape[0]))
         fmnist_loader = torch.utils.data.DataLoader(
             fmnist_dataset, batch_size=64, shuffle=False, drop_last=False
         )
         fmnist_predicted_probabilities = model.predict(fmnist_loader)
-        fmnist_predicted_classes = np.argmax(fmnist_predicted_probabilities, axis=1)
+        fmnist_predicted_classes = np.argmax(
+            fmnist_predicted_probabilities, axis=1)
         fmnist_confidences = np.max(fmnist_predicted_probabilities, axis=1)
         fmnist_sorted_confidence_indices = np.argsort(fmnist_confidences)
 
@@ -442,14 +485,17 @@ def evaluate(model: Model, eval_loader: torch.utils.data.DataLoader, data_dir: s
         for row in range(0, 4, 2):
             for col in range(5):
                 sample_idx = most_confident_indices[5 * row // 2 + col]
-                ax[row, col].imshow(np.reshape(fmnist_samples[sample_idx], (28, 28)), cmap='gray')
+                ax[row, col].imshow(np.reshape(
+                    fmnist_samples[sample_idx], (28, 28)), cmap='gray')
                 ax[row, col].set_axis_off()
-                ax[row + 1, col].set_title(f'predicted {fmnist_predicted_classes[sample_idx]}')
+                ax[row + 1,
+                    col].set_title(f'predicted {fmnist_predicted_classes[sample_idx]}')
                 ax[row + 1, col].bar(
                     np.arange(10), fmnist_predicted_probabilities[sample_idx], tick_label=np.arange(10)
                 )
         fig.suptitle('Most confident predictions', size=20)
-        fig.savefig(os.path.join(output_dir, 'fashionmnist_most_confident.pdf'))
+        fig.savefig(os.path.join(
+            output_dir, 'fashionmnist_most_confident.pdf'))
 
         # Plot FashionMNIST samples your model is least confident about
         print('Plotting least confident FashionMNIST predictions')
@@ -458,18 +504,22 @@ def evaluate(model: Model, eval_loader: torch.utils.data.DataLoader, data_dir: s
         for row in range(0, 4, 2):
             for col in range(5):
                 sample_idx = least_confident_indices[5 * row // 2 + col]
-                ax[row, col].imshow(np.reshape(fmnist_samples[sample_idx], (28, 28)), cmap='gray')
+                ax[row, col].imshow(np.reshape(
+                    fmnist_samples[sample_idx], (28, 28)), cmap='gray')
                 ax[row, col].set_axis_off()
-                ax[row + 1, col].set_title(f'predicted {fmnist_predicted_classes[sample_idx]}')
+                ax[row + 1,
+                    col].set_title(f'predicted {fmnist_predicted_classes[sample_idx]}')
                 ax[row + 1, col].bar(
                     np.arange(10), fmnist_predicted_probabilities[sample_idx], tick_label=np.arange(10)
                 )
         fig.suptitle('Least confident predictions', size=20)
-        fig.savefig(os.path.join(output_dir, 'fashionmnist_least_confident.pdf'))
+        fig.savefig(os.path.join(
+            output_dir, 'fashionmnist_least_confident.pdf'))
 
         print('Determining suitability of your model for OOD detection')
         all_confidences = np.concatenate([confidences, fmnist_confidences])
-        dataset_labels = np.concatenate([np.ones_like(confidences), np.zeros_like(fmnist_confidences)])
+        dataset_labels = np.concatenate(
+            [np.ones_like(confidences), np.zeros_like(fmnist_confidences)])
         print(
             'AUROC for MNIST vs. FashionMNIST OOD detection based on confidence: '
             f'{roc_auc_score(dataset_labels, all_confidences):.3f}'
@@ -525,11 +575,11 @@ class DenseNet(nn.Module):
 
 
 def main():
-    raise RuntimeError(
-        'This main method is for illustrative purposes only and will NEVER be called by the checker!\n'
-        'The checker always calls run_solution directly.\n'
-        'Please implement your solution exclusively in the methods and classes mentioned in the task description.'
-    )
+    # raise RuntimeError(
+    #    'This main method is for illustrative purposes only and will NEVER be called by the checker!\n'
+    #    'The checker always calls run_solution directly.\n'
+    #    'Please implement your solution exclusively in the methods and classes mentioned in the task description.'
+    #)
 
     # Load training data
     data_dir = os.curdir
