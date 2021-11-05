@@ -129,8 +129,7 @@ class Model(object):
                     # TODO: Implement Loss function
                     # Calculate Loss
                     # The loss function has this form --> 4. Let f(w,θ)=log(q(w|θ))−log(P(w)P(D|w)).
-                    loss = None
-
+                    loss = log_variational_posterior - (log_prior + y_pred)
 
                     # Backpropagate to get gradients
                     loss.backward()
@@ -273,7 +272,7 @@ class BayesianLayer(nn.Module):
         """
         I will follow the steps in the paper from Blundell, where we assume we have a diagonal Gaussian variational posterior
 
-        1. Sampleε∼N(0,I).
+        1. Sample ε∼N(0,I).
         2. Let w=μ+log(1+exp(ρ))◦ε.
         3. Let θ = (μ,ρ).
         4. Let f(w,θ)=log(q(w|θ))−log(P(w)P(D|w)).
@@ -295,9 +294,8 @@ class BayesianLayer(nn.Module):
         # Step 2: Sample from the variational posterior
         var_pos_mean = self.weights_var_posterior.mu
         var_pos_variance = self.weights_var_posterior.rho
-        weights = var_pos_mean + np.multiply(np.log(1+np.exp(var_pos_variance)),epsilon)
+        weights = var_pos_mean + torch.multiply(torch.log(1+torch.exp(var_pos_variance)),epsilon)
 
-        # The remaining steps have to be implemented in Model! or it is done automatically by torch (don't think so though)
 
         """
         Calculate the log prior --> sample of the log-prior probability
@@ -309,12 +307,12 @@ class BayesianLayer(nn.Module):
         """
         log_variational_posterior = self.weights_var_posterior.log_likelihood(weights)
 
-        if self.use_bias == True:
+        if self.use_bias:
             # Here We need to incorporate the same sampling procedure as for the weights
             epsilon_bias = torch.randn(self.out_features)
             bias_mean = self.bias_var_posterior.mu
             bias_variance = self.bias_var_posterior.sigma
-            bias = bias_mean + np.multiply(np.log(1+np.exp(bias_variance)),epsilon_bias)
+            bias = bias_mean + torch.multiply(torch.log(1+torch.exp(bias_variance)),epsilon_bias)
         else:
             bias = None
 
@@ -366,14 +364,14 @@ class BayesNet(nn.Module):
         current_log_var_post = torch.tensor(0.0)
         for idx, current_layer in enumerate(self.layers):
             # Calculate 1 forward pass for the first layer
-            new_features, new_log_prior, new_current_log_var_post = current_layer(current_features)
+            new_features, new_log_prior, new_log_var_post = current_layer(current_features)
             # As long as we are not in the last layer we apply the activation to the features
             if idx < len(self.layers) - 1:
                 new_features = self.activation(new_features)
             # For the last layer we don't apply the activation function
             current_features = new_features
             current_log_prior = new_log_prior
-            current_log_var_post = new_current_log_var_post
+            current_log_var_post = new_log_var_post
 
         # Set the output variables to the computed values after a full pass through the BayesNet
         log_prior = current_log_prior
@@ -415,12 +413,13 @@ class UnivariateGaussian(ParameterDistribution):
     def log_likelihood(self, values: torch.Tensor) -> torch.Tensor:
         # TODO: Implement this
         n = len(values)
-        log_like = n * (np.log(2*np.pi*self.sigma**2)/2) + np.sum(((values-self.mu)**2)/2*self.sigma)
-        return torch.tensor(log_like)
+        torch_pi = torch.tensor(np.pi)
+        log_like = n * (torch.log(2*torch_pi*self.sigma**2)/2) + torch.sum(((values-self.mu)**2)/2*self.sigma)
+        return log_like
 
     def sample(self) -> torch.Tensor:
         # TODO: Implement this
-        return torch.Tensor(np.random.normal(self.mu, self.sigma, 1))
+        return torch.normal(torch.tensor(self.mu), torch.tensor(self.sigma))
 
 
 class MultivariateDiagonalGaussian(ParameterDistribution):
@@ -440,13 +439,27 @@ class MultivariateDiagonalGaussian(ParameterDistribution):
 
     def log_likelihood(self, values: torch.Tensor) -> torch.Tensor:
         # TODO: Implement this
-        return 0.0
+        rho = self.rho.clone().detach()
+        mu = self.mu.clone().detach()
+        rho_resized = torch.reshape(rho, (-1,))
+        mu_resized = torch.reshape(mu, (-1,))
+        values_resized = torch.reshape(values, (-1,))
+        COV = torch.diag(rho_resized)
+        p = torch.tensor(rho_resized.size())  # dimension of diagonal matrix
+        m = torch.tensor(values_resized.size())  # number of samples (=X)
+
+        loglik = -m * p / 2 - m / 2 + torch.log(torch.linalg.det(COV)) - 1 / 2 * (values_resized - mu_resized).t() * torch.inverse(COV) * (values_resized - mu_resized)
+        return loglik
 
     def sample(self) -> torch.Tensor:
         # TODO: Implement this
-        sigma = torch.nn.Softplus()
-        np.diag(np.diag(sigma(self.rho)))
-        raise NotImplementedError()
+        rho = self.rho.clone().detach()
+        mu = self.mu.clone().detach()
+        rho_resized = torch.reshape(rho, (-1,))
+        mu_resized = torch.reshape(mu, (-1,))
+        COV = torch.diag(rho_resized)
+        val = torch.normal(mu_resized, COV)
+        return val
 
 
 def evaluate(model: Model, eval_loader: torch.utils.data.DataLoader, data_dir: str, output_dir: str):
@@ -634,11 +647,12 @@ class DenseNet(nn.Module):
 
 
 def main():
+    """
     raise RuntimeError(
         'This main method is for illustrative purposes only and will NEVER be called by the checker!\n'
         'The checker always calls run_solution directly.\n'
         'Please implement your solution exclusively in the methods and classes mentioned in the task description.'
-    )
+    )"""
 
     # Load training data
     data_dir = os.curdir
