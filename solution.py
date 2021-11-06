@@ -60,7 +60,7 @@ class Model(object):
         self.num_epochs = 100  # number of training epochs
         self.batch_size = 128  # training batch size
         learning_rate = 1e-3  # training learning rates
-        hidden_layers = (100, 100)  # (#layers,#units per layer)
+        hidden_layers = (5, 20)  # (#layers,#units per layer)
         # for each entry, creates a hidden layer with the corresponding number of units
         use_densenet = False  # Basically to compare to a standard NN
         # set this to True in order to run a DenseNet for comparison
@@ -129,7 +129,7 @@ class Model(object):
                     # TODO: Implement Loss function
                     # Calculate Loss
                     # The loss function has this form --> 4. Let f(w,θ)=log(q(w|θ))−log(P(w)P(D|w)).
-                    loss = log_variational_posterior - (log_prior + y_pred)
+                    loss = F.linear(log_variational_posterior,1,0) - F.linear(log_prior,1,0) + F.nll_loss(F.softmax(y_pred, dim=1), batch_y, reduction='sum')
 
                     # Backpropagate to get gradients
                     loss.backward()
@@ -222,10 +222,10 @@ class BayesianLayer(nn.Module):
         """
         self.weights_var_posterior = MultivariateDiagonalGaussian(
             torch.nn.Parameter(
-                torch.zeros((in_features, out_features))
+                torch.zeros((out_features, in_features))
             ),
             torch.nn.Parameter(
-                torch.zeros((in_features, out_features))
+                torch.ones((out_features, in_features))
             )
         )
 
@@ -244,7 +244,7 @@ class BayesianLayer(nn.Module):
                     torch.zeros(out_features)
                 ),
                 torch.nn.Parameter(
-                    torch.zeros(out_features)
+                    torch.ones(out_features)
                 )
             )
             assert isinstance(self.bias_var_posterior, ParameterDistribution)
@@ -289,7 +289,7 @@ class BayesianLayer(nn.Module):
         """
 
         # Step 1: Sample Gaussian, we have the same number of weights as in_features*out_features
-        epsilon = torch.randn((self.in_features, self.out_features))
+        epsilon = torch.randn((self.out_features, self.in_features))
 
         # Step 2: Sample from the variational posterior
         var_pos_mean = self.weights_var_posterior.mu
@@ -311,7 +311,7 @@ class BayesianLayer(nn.Module):
             # Here We need to incorporate the same sampling procedure as for the weights
             epsilon_bias = torch.randn(self.out_features)
             bias_mean = self.bias_var_posterior.mu
-            bias_variance = self.bias_var_posterior.sigma
+            bias_variance = self.bias_var_posterior.rho
             bias = bias_mean + torch.multiply(torch.log(1+torch.exp(bias_variance)),epsilon_bias)
         else:
             bias = None
@@ -439,8 +439,8 @@ class MultivariateDiagonalGaussian(ParameterDistribution):
 
     def log_likelihood(self, values: torch.Tensor) -> torch.Tensor:
         # TODO: Implement this
-        rho = self.rho.clone().detach()
-        mu = self.mu.clone().detach()
+        rho = self.rho
+        mu = self.mu
         rho_resized = torch.reshape(rho, (-1,))
         mu_resized = torch.reshape(mu, (-1,))
         values_resized = torch.reshape(values, (-1,))
@@ -453,8 +453,8 @@ class MultivariateDiagonalGaussian(ParameterDistribution):
 
     def sample(self) -> torch.Tensor:
         # TODO: Implement this
-        rho = self.rho.clone().detach()
-        mu = self.mu.clone().detach()
+        rho = self.rho
+        mu = self.mu
         rho_resized = torch.reshape(rho, (-1,))
         mu_resized = torch.reshape(mu, (-1,))
         COV = torch.diag(rho_resized)
