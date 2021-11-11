@@ -57,7 +57,7 @@ class Model(object):
         # Hyperparameters and general parameters
         # You might want to play around with those
         self.num_epochs = 10  # number of training epochs
-        self.batch_size = 24  # training batch size
+        self.batch_size = 20  # training batch size
         learning_rate = 1e-3  # training learning rates
         hidden_layers = (100, 100)  # (#layers,#units per layer)
         # for each entry, creates a hidden layer with the corresponding number of units
